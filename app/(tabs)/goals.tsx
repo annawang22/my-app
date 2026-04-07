@@ -1,26 +1,21 @@
-import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
-    Alert,
-    Keyboard,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    useWindowDimensions,
-    View,
+  StyleSheet,
+  ScrollView,
+  View,
+  TouchableOpacity,
+  Text,
+  Alert,
+  TextInput,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { Goal, workoutStorage } from '@/utils/workoutStorage';
+import { workoutStorage, Goal } from '@/utils/workoutStorage';
 
 export default function GoalsScreen() {
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -31,89 +26,45 @@ export default function GoalsScreen() {
 
   // Exercise form state
   const [exerciseName, setExerciseName] = useState('');
-  const [exerciseSets, setExerciseSets] = useState('');
-  const [exerciseReps, setExerciseReps] = useState('');
+  const [exerciseSets, setExerciseSets] = useState('3');
+  const [exerciseReps, setExerciseReps] = useState('10');
   const [exerciseWeight, setExerciseWeight] = useState('');
   const [exerciseDuration, setExerciseDuration] = useState('');
 
-  const goalCardBg = useThemeColor({ light: '#f4f5f6', dark: '#25282c' }, 'background');
-  const exerciseRowBg = useThemeColor({ light: '#ffffff', dark: '#2e3134' }, 'background');
-  const cardBorderColor = useThemeColor({ light: '#d0d4d8', dark: '#3a3e42' }, 'icon');
-  const modalSurface = useThemeColor({ light: '#ffffff', dark: '#2c2f33' }, 'background');
-  const inputBg = useThemeColor({ light: '#f4f5f6', dark: '#363a3e' }, 'background');
-  const inputTextColor = useThemeColor({}, 'text');
-  const cancelButtonBg = useThemeColor({ light: '#e2e5e9', dark: '#3a3f44' }, 'background');
-  const cancelButtonBorder = useThemeColor({ light: '#5c6370', dark: '#9aa3ad' }, 'icon');
-  const cancelLabelColor = useThemeColor({}, 'text');
+  useFocusEffect(
+    React.useCallback(() => {
+      loadGoals();
+    }, [])
+  );
 
-  const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
-  const headerTitleSize = windowWidth < 380 ? 26 : 30;
-  const goalNameInputRef = useRef<TextInput>(null);
-  const exerciseNameInputRef = useRef<TextInput>(null);
-
-  useEffect(() => {
-    if (showAddGoalModal) {
-      const t = setTimeout(() => goalNameInputRef.current?.focus(), 100);
-      return () => clearTimeout(t);
-    }
-  }, [showAddGoalModal]);
-
-  useEffect(() => {
-    if (showAddExerciseModal) {
-      const t = setTimeout(() => exerciseNameInputRef.current?.focus(), 100);
-      return () => clearTimeout(t);
-    }
-  }, [showAddExerciseModal]);
-
-  const loadGoals = useCallback(async () => {
+  const loadGoals = async () => {
     try {
       const loadedGoals = await workoutStorage.getGoals();
       setGoals(loadedGoals);
     } catch (error) {
       console.error('Failed to load goals', error);
     }
-  }, []);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      loadGoals();
-    }, [loadGoals])
-  );
+  };
 
   const handleAddGoal = async () => {
-    const name = newGoalName.trim();
-    if (!name) {
+    if (!newGoalName.trim()) {
       Alert.alert('Error', 'Goal name is required');
       return;
     }
 
     try {
-      const created = await workoutStorage.addGoal(name);
+      await workoutStorage.addGoal(newGoalName);
       setNewGoalName('');
       setShowAddGoalModal(false);
-      const loaded = await workoutStorage.getGoals();
-      setGoals((prev) => {
-        if (loaded.length > 0) return loaded;
-        if (prev.some((g) => g.id === created.id)) return prev;
-        return [...prev, created];
-      });
+      await loadGoals();
     } catch (err) {
       Alert.alert('Error', 'Failed to add goal');
     }
   };
 
   const handleAddExercise = async () => {
-    const name = exerciseName.trim();
-    if (!name || !exerciseSets || !exerciseReps) {
+    if (!exerciseName.trim() || !exerciseSets || !exerciseReps) {
       Alert.alert('Error', 'Please fill in required fields');
-      return;
-    }
-
-    const setsNum = Number.parseInt(exerciseSets.trim(), 10);
-    const repsNum = Number.parseInt(exerciseReps.trim(), 10);
-    if (!Number.isFinite(setsNum) || setsNum < 1 || !Number.isFinite(repsNum) || repsNum < 1) {
-      Alert.alert('Error', 'Enter valid whole numbers for sets and reps (at least 1)');
       return;
     }
 
@@ -122,37 +73,26 @@ export default function GoalsScreen() {
       return;
     }
 
-    const goalIdForUpdate = selectedGoalId;
-
     try {
-      const created = await workoutStorage.addExercise(
-        goalIdForUpdate,
-        name,
-        setsNum,
-        repsNum,
-        exerciseWeight.trim() || undefined,
-        exerciseDuration.trim() || undefined,
-        goals
+      await workoutStorage.addExercise(
+        selectedGoalId,
+        exerciseName,
+        parseInt(exerciseSets),
+        parseInt(exerciseReps),
+        exerciseWeight || undefined,
+        exerciseDuration || undefined
       );
 
-      setGoals((prev) =>
-        prev.map((g) =>
-          String(g.id) === String(goalIdForUpdate)
-            ? { ...g, exercises: [...(Array.isArray(g.exercises) ? g.exercises : []), created] }
-            : g
-        )
-      );
-
+      // Reset form
       setExerciseName('');
-      setExerciseSets('');
-      setExerciseReps('');
+      setExerciseSets('3');
+      setExerciseReps('10');
       setExerciseWeight('');
       setExerciseDuration('');
       setShowAddExerciseModal(false);
       setSelectedGoalId(null);
 
-      const loadedAfter = await workoutStorage.getGoals();
-      setGoals((prev) => (loadedAfter.length > 0 ? loadedAfter : prev));
+      await loadGoals();
     } catch (error) {
       Alert.alert('Error', 'Failed to add exercise');
     }
@@ -192,21 +132,13 @@ export default function GoalsScreen() {
     ]);
   };
 
-  const modalOpen = showAddGoalModal || showAddExerciseModal;
-
   return (
-    <ThemedView style={[styles.container, { paddingTop: insets.top + 8 }]}>
+    <ThemedView style={styles.container}>
       <View style={styles.header}>
-        <ThemedText type="title" style={{ fontSize: headerTitleSize, lineHeight: headerTitleSize + 4 }}>
-          My Goals
-        </ThemedText>
+        <ThemedText type="title">My Goals</ThemedText>
       </View>
 
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {goals.length === 0 ? (
           <ThemedView style={styles.emptyState}>
             <ThemedText style={styles.emptyText}>No goals yet</ThemedText>
@@ -217,12 +149,7 @@ export default function GoalsScreen() {
         ) : (
           <View style={styles.goalsList}>
             {goals.map((goal) => (
-              <View
-                key={goal.id}
-                style={[
-                  styles.goalCard,
-                  { backgroundColor: goalCardBg, borderColor: cardBorderColor },
-                ]}>
+              <View key={goal.id} style={styles.goalCard}>
                 <View style={styles.goalHeader}>
                   <ThemedText type="subtitle">{goal.name}</ThemedText>
                   <TouchableOpacity
@@ -233,16 +160,14 @@ export default function GoalsScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {(Array.isArray(goal.exercises) ? goal.exercises : []).length === 0 ? (
+                {goal.exercises.length === 0 ? (
                   <ThemedText style={styles.noExercistes}>
                     No exercises yet. Tap + to add one
                   </ThemedText>
                 ) : (
                   <View style={styles.exercisesList}>
-                    {(Array.isArray(goal.exercises) ? goal.exercises : []).map((exercise) => (
-                      <View
-                        key={exercise.id}
-                        style={[styles.exerciseItem, { backgroundColor: exerciseRowBg }]}>
+                    {goal.exercises.map((exercise) => (
+                      <View key={exercise.id} style={styles.exerciseItem}>
                         <View style={styles.exerciseInfo}>
                           <ThemedText style={styles.exerciseName}>
                             {exercise.name}
@@ -276,95 +201,52 @@ export default function GoalsScreen() {
         )}
       </ScrollView>
 
-      <View
-        style={[styles.floatingButtonWrap, { bottom: insets.bottom + 72 }]}
-        pointerEvents={modalOpen ? 'none' : 'auto'}>
-        <TouchableOpacity style={styles.floatingButton} onPress={() => setShowAddGoalModal(true)}>
-          <Text style={styles.floatingButtonText}>+</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={styles.floatingButton}
+        onPress={() => setShowAddGoalModal(true)}>
+        <Text style={styles.floatingButtonText}>+</Text>
+      </TouchableOpacity>
 
       {/* Add Goal Modal */}
       <Modal
         visible={showAddGoalModal}
         transparent
         animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => {
-          Keyboard.dismiss();
-          setShowAddGoalModal(false);
-        }}>
-        <KeyboardAvoidingView
-          style={styles.modalRoot}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}>
-          <View style={[styles.modalOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-            <Pressable
-              style={StyleSheet.absoluteFillObject}
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss"
-              onPress={() => {
-                Keyboard.dismiss();
-                setShowAddGoalModal(false);
-              }}
-            />
-            <ScrollView
-              style={styles.modalScrollView}
-              bounces={false}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.modalScroll}>
-              <View style={[styles.modalContent, { backgroundColor: modalSurface }]}>
-                  <ThemedText type="subtitle" style={styles.modalTitle}>
-                    Create New Goal
-                  </ThemedText>
+        onRequestClose={() => setShowAddGoalModal(false)}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <View style={styles.modalContent}>
+              <ThemedText type="subtitle" style={styles.modalTitle}>
+                Create New Goal
+              </ThemedText>
 
-                  <TextInput
-                    ref={goalNameInputRef}
-                    style={[
-                      styles.input,
-                      { backgroundColor: inputBg, color: inputTextColor, borderColor: cardBorderColor },
-                    ]}
-                    placeholder="Goal name (e.g., Build Glutes)"
-                    placeholderTextColor="#999"
-                    value={newGoalName}
-                    onChangeText={setNewGoalName}
-                    editable
-                    returnKeyType="done"
-                    blurOnSubmit
-                    onSubmitEditing={handleAddGoal}
-                    autoCorrect
-                    autoCapitalize="sentences"
-                  />
+              <TextInput
+                style={styles.input}
+                placeholder="Goal name (e.g., Build Glutes)"
+                placeholderTextColor="#999"
+                value={newGoalName}
+                onChangeText={setNewGoalName}
+              />
 
-                  <View style={styles.modalButtons}>
-                    <TouchableOpacity
-                      style={[
-                        styles.button,
-                        {
-                          backgroundColor: cancelButtonBg,
-                          borderColor: cancelButtonBorder,
-                          borderWidth: 2,
-                        },
-                      ]}
-                      onPress={() => {
-                        setNewGoalName('');
-                        Keyboard.dismiss();
-                        setShowAddGoalModal(false);
-                      }}>
-                      <Text style={[styles.cancelButtonText, { color: cancelLabelColor }]}>Cancel</Text>
-                    </TouchableOpacity>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={() => {
+                    setNewGoalName('');
+                    setShowAddGoalModal(false);
+                  }}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={[styles.button, styles.createButton]}
-                      onPress={handleAddGoal}>
-                      <Text style={styles.buttonText}>Create</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+                <TouchableOpacity
+                  style={[styles.button, styles.createButton]}
+                  onPress={handleAddGoal}>
+                  <Text style={styles.buttonText}>Create</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* Add Exercise Modal */}
@@ -372,56 +254,25 @@ export default function GoalsScreen() {
         visible={showAddExerciseModal}
         transparent
         animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => {
-          Keyboard.dismiss();
-          setShowAddExerciseModal(false);
-        }}>
-        <KeyboardAvoidingView
-          style={styles.modalRoot}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}>
-          <View style={[styles.modalOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-            <Pressable
-              style={StyleSheet.absoluteFillObject}
-              onPress={() => {
-                Keyboard.dismiss();
-                setShowAddExerciseModal(false);
-              }}
-            />
-            <ScrollView
-              style={styles.modalScrollView}
-              bounces={false}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.modalScroll}>
-                <View style={[styles.modalContent, { backgroundColor: modalSurface }]}>
-                  <ThemedText type="subtitle" style={styles.modalTitle}>
-                    Add Exercise
-                  </ThemedText>
+        onRequestClose={() => setShowAddExerciseModal(false)}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <View style={styles.modalContent}>
+              <ThemedText type="subtitle" style={styles.modalTitle}>
+                Add Exercise
+              </ThemedText>
 
-                  <TextInput
-                    ref={exerciseNameInputRef}
-                    style={[
-                      styles.input,
-                      { backgroundColor: inputBg, color: inputTextColor, borderColor: cardBorderColor },
-                    ]}
-                    placeholder="Exercise name"
-                    placeholderTextColor="#999"
-                    value={exerciseName}
-                    onChangeText={setExerciseName}
-                    editable
-                    returnKeyType="next"
-                    autoCorrect
-                  />
+              <TextInput
+                style={styles.input}
+                placeholder="Exercise name"
+                placeholderTextColor="#999"
+                value={exerciseName}
+                onChangeText={setExerciseName}
+              />
 
-                  <View style={styles.twoColumnRow}>
+              <View style={styles.twoColumnRow}>
                 <TextInput
-                  style={[
-                    styles.input,
-                    styles.halfWidth,
-                    { backgroundColor: inputBg, color: inputTextColor, borderColor: cardBorderColor },
-                  ]}
+                  style={[styles.input, styles.halfWidth]}
                   placeholder="Sets"
                   placeholderTextColor="#999"
                   value={exerciseSets}
@@ -429,74 +280,55 @@ export default function GoalsScreen() {
                   keyboardType="number-pad"
                 />
                 <TextInput
-                  style={[
-                    styles.input,
-                    styles.halfWidth,
-                    { backgroundColor: inputBg, color: inputTextColor, borderColor: cardBorderColor },
-                  ]}
+                  style={[styles.input, styles.halfWidth]}
                   placeholder="Reps"
                   placeholderTextColor="#999"
                   value={exerciseReps}
                   onChangeText={setExerciseReps}
                   keyboardType="number-pad"
                 />
-                  </View>
+              </View>
 
-                  <TextInput
-                    style={[
-                      styles.input,
-                      { backgroundColor: inputBg, color: inputTextColor, borderColor: cardBorderColor },
-                    ]}
-                    placeholder="Weight (optional, e.g., 55 pounds)"
-                    placeholderTextColor="#999"
-                    value={exerciseWeight}
-                    onChangeText={setExerciseWeight}
-                  />
+              <TextInput
+                style={styles.input}
+                placeholder="Weight (optional, e.g., 55 pounds)"
+                placeholderTextColor="#999"
+                value={exerciseWeight}
+                onChangeText={setExerciseWeight}
+              />
 
-                  <TextInput
-                    style={[
-                      styles.input,
-                      { backgroundColor: inputBg, color: inputTextColor, borderColor: cardBorderColor },
-                    ]}
-                    placeholder="Duration (optional, e.g., 30 minutes)"
-                    placeholderTextColor="#999"
-                    value={exerciseDuration}
-                    onChangeText={setExerciseDuration}
-                  />
+              <TextInput
+                style={styles.input}
+                placeholder="Duration (optional, e.g., 30 minutes)"
+                placeholderTextColor="#999"
+                value={exerciseDuration}
+                onChangeText={setExerciseDuration}
+              />
 
-                  <View style={styles.modalButtons}>
-                    <TouchableOpacity
-                      style={[
-                        styles.button,
-                        {
-                          backgroundColor: cancelButtonBg,
-                          borderColor: cancelButtonBorder,
-                          borderWidth: 2,
-                        },
-                      ]}
-                      onPress={() => {
-                        setExerciseName('');
-                        setExerciseSets('');
-                        setExerciseReps('');
-                        setExerciseWeight('');
-                        setExerciseDuration('');
-                        Keyboard.dismiss();
-                        setShowAddExerciseModal(false);
-                        setSelectedGoalId(null);
-                      }}>
-                      <Text style={[styles.cancelButtonText, { color: cancelLabelColor }]}>Cancel</Text>
-                    </TouchableOpacity>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={() => {
+                    setExerciseName('');
+                    setExerciseSets('3');
+                    setExerciseReps('10');
+                    setExerciseWeight('');
+                    setExerciseDuration('');
+                    setShowAddExerciseModal(false);
+                    setSelectedGoalId(null);
+                  }}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={[styles.button, styles.createButton]}
-                      onPress={handleAddExercise}>
-                      <Text style={styles.buttonText}>Add</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+                <TouchableOpacity
+                  style={[styles.button, styles.createButton]}
+                  onPress={handleAddExercise}>
+                  <Text style={styles.buttonText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </ThemedView>
   );
@@ -505,17 +337,18 @@ export default function GoalsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 40,
   },
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
   content: {
     flex: 1,
-    paddingHorizontal: 14,
-    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingTop: 20,
   },
   emptyState: {
     justifyContent: 'center',
@@ -538,8 +371,10 @@ const styles = StyleSheet.create({
   },
   goalCard: {
     borderWidth: 1,
+    borderColor: '#ddd',
     borderRadius: 8,
     padding: 16,
+    backgroundColor: '#f9f9f9',
   },
   goalHeader: {
     flexDirection: 'row',
@@ -559,15 +394,16 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   exercisesList: {
+    gap: 8,
     marginBottom: 12,
   },
   exerciseItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: 'white',
     borderRadius: 6,
     padding: 12,
-    marginBottom: 8,
   },
   exerciseInfo: {
     flex: 1,
@@ -594,15 +430,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
-  floatingButtonWrap: {
-    position: 'absolute',
-    right: 16,
-    zIndex: 10,
-  },
   floatingButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#c1121f',
     justifyContent: 'center',
     alignItems: 'center',
@@ -617,45 +451,31 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
-  modalRoot: {
-    flex: 1,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  modalScrollView: {
-    width: '100%',
-    maxWidth: 440,
-    zIndex: 2,
-    elevation: 8,
-  },
-  modalScroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
   modalContent: {
+    backgroundColor: 'white',
     borderRadius: 12,
-    padding: 18,
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'center',
+    padding: 20,
+    width: '85%',
   },
   modalTitle: {
     marginBottom: 16,
   },
   input: {
     borderWidth: 1,
+    borderColor: '#ddd',
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 10,
     marginBottom: 12,
-    fontSize: 15,
-    minHeight: 48,
+    fontSize: 14,
+    backgroundColor: '#f9f9f9',
+    color: '#333',
   },
   twoColumnRow: {
     flexDirection: 'row',
@@ -675,9 +495,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
+  cancelButton: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
   cancelButtonText: {
-    fontWeight: '700',
-    fontSize: 15,
+    color: '#333',
+    fontWeight: '600',
   },
   createButton: {
     backgroundColor: '#c1121f',

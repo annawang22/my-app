@@ -1,29 +1,23 @@
-import { useFocusEffect } from '@react-navigation/native';
 import React, { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TouchableOpacity,
-    useWindowDimensions,
-    View,
+  StyleSheet,
+  ScrollView,
+  View,
+  TouchableOpacity,
+  Text,
+  Alert,
+  Switch,
+  ActivityIndicator,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useAuthSession } from '@/contexts/auth-session';
 import { auth, User } from '@/utils/auth';
 import { workoutStorage } from '@/utils/workoutStorage';
 
 export default function ProfileScreen() {
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const titleSize = width < 380 ? 26 : 30;
-  const { signOut } = useAuthSession();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [completedToday, setCompletedToday] = useState(0);
@@ -72,7 +66,8 @@ export default function ProfileScreen() {
         text: 'Logout',
         onPress: async () => {
           try {
-            await signOut();
+            await auth.logout();
+            router.replace('/');
           } catch (error) {
             Alert.alert('Error', 'Failed to logout');
           }
@@ -90,34 +85,52 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ThemedView style={[styles.container, { paddingTop: insets.top + 8 }]}>
+    <ThemedView style={styles.container}>
       <View style={styles.header}>
-        <ThemedText type="title" style={{ fontSize: titleSize, lineHeight: titleSize + 4 }}>
-          Profile
-        </ThemedText>
+        <ThemedText type="title">Profile</ThemedText>
       </View>
 
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-        showsVerticalScrollIndicator={false}>
-        <View style={styles.profileRow}>
-          <View style={styles.avatar}>
-            <ThemedText style={styles.avatarText}>
-              {user?.name.charAt(0).toUpperCase()}
-            </ThemedText>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* User Info Section */}
+        <View style={styles.section}>
+          <View style={styles.userGreeting}>
+            <View style={styles.avatar}>
+              <ThemedText style={styles.avatarText}>
+                {user?.name.charAt(0).toUpperCase()}
+              </ThemedText>
+            </View>
+            <View style={styles.userInfo}>
+              <ThemedText type="subtitle" style={styles.welcomeText}>
+                Welcome {user?.name}
+              </ThemedText>
+              <ThemedText style={styles.userHandle}>@{user?.username}</ThemedText>
+            </View>
           </View>
-          <View style={styles.userInfo}>
-            <ThemedText type="subtitle" style={styles.displayName}>
-              {user?.name}
-            </ThemedText>
-            <ThemedText style={styles.userHandle}>@{user?.username}</ThemedText>
-            <ThemedText style={styles.statsLine}>
-              {totalWorkouts} exercises tracked · {completedToday} completed
-              {totalWorkouts > 0
-                ? ` · ${((completedToday / totalWorkouts) * 100).toFixed(0)}% done`
-                : ''}
-            </ThemedText>
+        </View>
+
+        {/* Achievements Section */}
+        <View style={styles.section}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            Achievements
+          </ThemedText>
+
+          <View style={styles.achievementsGrid}>
+            <View style={styles.achievementCard}>
+              <ThemedText style={styles.achievementNumber}>{totalWorkouts}</ThemedText>
+              <ThemedText style={styles.achievementLabel}>Total Exercises</ThemedText>
+            </View>
+
+            <View style={styles.achievementCard}>
+              <ThemedText style={styles.achievementNumber}>{completedToday}</ThemedText>
+              <ThemedText style={styles.achievementLabel}>Completed</ThemedText>
+            </View>
+
+            <View style={styles.achievementCard}>
+              <ThemedText style={styles.achievementNumber}>
+                {totalWorkouts > 0 ? ((completedToday / totalWorkouts) * 100).toFixed(0) : 0}%
+              </ThemedText>
+              <ThemedText style={styles.achievementLabel}>Completion Rate</ThemedText>
+            </View>
           </View>
         </View>
 
@@ -167,17 +180,18 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 40,
   },
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
   content: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 24,
+    paddingTop: 20,
   },
   section: {
     marginBottom: 24,
@@ -186,13 +200,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 18,
   },
-  profileRow: {
+  userGreeting: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 28,
-    paddingBottom: 24,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(128,128,128,0.35)',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 16,
   },
   avatar: {
     width: 60,
@@ -210,22 +223,39 @@ const styles = StyleSheet.create({
   },
   userInfo: {
     flex: 1,
-    justifyContent: 'center',
-    minHeight: 60,
   },
-  displayName: {
-    fontSize: 20,
-    marginBottom: 2,
+  welcomeText: {
+    fontSize: 16,
+    marginBottom: 4,
   },
   userHandle: {
-    fontSize: 14,
-    opacity: 0.55,
-    marginBottom: 10,
-  },
-  statsLine: {
     fontSize: 13,
-    opacity: 0.65,
-    lineHeight: 18,
+    opacity: 0.6,
+  },
+  achievementsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  achievementCard: {
+    flex: 1,
+    minWidth: '30%',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  achievementNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#c1121f',
+    marginBottom: 4,
+  },
+  achievementLabel: {
+    fontSize: 12,
+    opacity: 0.7,
+    textAlign: 'center',
   },
   settingItem: {
     flexDirection: 'row',
