@@ -1,48 +1,117 @@
+import { credentialStorage } from './credentialStorage';
 import SafeAsyncStorage from './asyncStorageWrapper';
 
 export interface User {
   username: string;
   name: string;
-  password: string; // This will be hashed in production; for MVP stored securely
+  password: string; // Stored as hash only
 }
 
-// Simple hash function for passwords (NOT for production - use proper bcrypt)
+const SESSION_USERNAME_KEY = 'currentUser';
+
+/** In-memory fallback when secure storage read fails but the user is still in-session. */
+let sessionUsernameCache: string | null = null;
+
+const userRecordKey = (username: string) => `user_${username}`;
+
+// Simple hash for passwords (replace with server-side bcrypt in production)
 const hashPassword = (password: string): string => {
   let hash = 0;
   for (let i = 0; i < password.length; i++) {
     const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash;
   }
   return Math.abs(hash).toString();
 };
 
+async function getSessionUsername(): Promise<string | null> {
+  try {
+    let username = await credentialStorage.getItem(SESSION_USERNAME_KEY);
+    if (!username) {
+      username = await SafeAsyncStorage.getItem(SESSION_USERNAME_KEY);
+      if (username) {
+        await credentialStorage.setItem(SESSION_USERNAME_KEY, username);
+        await SafeAsyncStorage.removeItem(SESSION_USERNAME_KEY);
+      }
+    }
+    if (username) {
+      sessionUsernameCache = username;
+      return username;
+    }
+  } catch {
+    // fall through to cache
+  }
+  return sessionUsernameCache;
+}
+
+async function setSessionUsername(username: string): Promise<void> {
+  sessionUsernameCache = username;
+  await credentialStorage.setItem(SESSION_USERNAME_KEY, username);
+  await SafeAsyncStorage.removeItem(SESSION_USERNAME_KEY);
+}
+
+async function clearSessionUsername(): Promise<void> {
+  sessionUsernameCache = null;
+  await credentialStorage.removeItem(SESSION_USERNAME_KEY);
+  await SafeAsyncStorage.removeItem(SESSION_USERNAME_KEY);
+}
+
+async function readUserRecord(username: string): Promise<User | null> {
+  const key = userRecordKey(username);
+  let raw = await credentialStorage.getItem(key);
+  if (!raw) {
+    raw = await SafeAsyncStorage.getItem(key);
+    if (raw) {
+      await credentialStorage.setItem(key, raw);
+      await SafeAsyncStorage.removeItem(key);
+    }
+  }
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as User;
+  } catch {
+    return null;
+  }
+}
+
+async function writeUserRecord(user: User): Promise<void> {
+  const key = userRecordKey(user.username);
+  await credentialStorage.setItem(key, JSON.stringify(user));
+  await SafeAsyncStorage.removeItem(key);
+}
+
 export const auth = {
-  // Initialize demo account on first run
   async initializeDemoAccount(): Promise<void> {
     try {
-      const initialized = await SafeAsyncStorage.getItem('demo_initialized');
-      if (!initialized) {
-        const existingUser = await SafeAsyncStorage.getItem('user_demo');
-        if (!existingUser) {
-          const user: User = {
-            username: 'demo',
-            name: 'Demo User',
-            password: hashPassword('demo123'),
-          };
-          await SafeAsyncStorage.setItem('user_demo', JSON.stringify(user));
+      try {
+        const initialized = await SafeAsyncStorage.getItem('demo_initialized');
+        if (!initialized) {
+          const demoUser = await readUserRecord('demo');
+          if (!demoUser) {
+            const user: User = {
+              username: 'demo',
+              name: 'Demo User',
+              password: hashPassword('demo123'),
+            };
+            await writeUserRecord(user);
+          }
+          await SafeAsyncStorage.setItem('demo_initialized', 'true');
         }
-        await SafeAsyncStorage.setItem('demo_initialized', 'true');
+      } catch (storageError) {
+        console.warn('Demo account storage error (will use fallback):', storageError);
       }
     } catch (error) {
       console.error('Failed to initialize demo account', error);
     }
   },
 
-  // Create new account
-  async createAccount(username: string, password: string, name: string): Promise<{ success: boolean; error?: string }> {
+  async createAccount(
+    username: string,
+    password: string,
+    name: string
+  ): Promise<{ success: boolean; error?: string }> {
     try {
-      // Validate inputs
       if (!username || !password || !name) {
         return { success: false, error: 'All fields are required' };
       }
@@ -53,24 +122,20 @@ export const auth = {
         return { success: false, error: 'Password must be at least 6 characters' };
       }
 
-      // Check if user already exists
-      const existingUser = await SafeAsyncStorage.getItem(`user_${username}`);
-      if (existingUser) {
+      const existing = await readUserRecord(username);
+      if (existing) {
         return { success: false, error: 'Username already exists' };
       }
 
-      // Hash password
       const hashedPassword = hashPassword(password);
-
-      // Store user
       const user: User = {
         username,
         password: hashedPassword,
         name,
       };
 
-      await SafeAsyncStorage.setItem(`user_${username}`, JSON.stringify(user));
-      await SafeAsyncStorage.setItem('currentUser', username);
+      await writeUserRecord(user);
+      await setSessionUsername(username);
 
       return { success: true };
     } catch (error) {
@@ -78,56 +143,55 @@ export const auth = {
     }
   },
 
-  // Login
   async login(username: string, password: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const userStr = await SafeAsyncStorage.getItem(`user_${username}`);
-      if (!userStr) {
+      const user = await readUserRecord(username);
+      if (!user) {
         return { success: false, error: 'User not found' };
       }
 
-      const user: User = JSON.parse(userStr);
       const hashedPassword = hashPassword(password);
-
       if (user.password !== hashedPassword) {
         return { success: false, error: 'Incorrect password' };
       }
 
-      await SafeAsyncStorage.setItem('currentUser', username);
+      await setSessionUsername(username);
       return { success: true };
     } catch (error) {
       return { success: false, error: 'Login failed' };
     }
   },
 
-  // Get current user
   async getCurrentUser(): Promise<User | null> {
     try {
-      const username = await SafeAsyncStorage.getItem('currentUser');
+      const username = await getSessionUsername();
       if (!username) return null;
-
-      const userStr = await SafeAsyncStorage.getItem(`user_${username}`);
-      if (!userStr) return null;
-
-      return JSON.parse(userStr);
+      return await readUserRecord(username);
     } catch (error) {
       return null;
     }
   },
 
-  // Logout
+  /** Session username only — use for scoping data when the full user record might not be readable yet. */
+  async getLoggedInUsername(): Promise<string | null> {
+    try {
+      return await getSessionUsername();
+    } catch {
+      return null;
+    }
+  },
+
   async logout(): Promise<void> {
     try {
-      await SafeAsyncStorage.removeItem('currentUser');
+      await clearSessionUsername();
     } catch (error) {
       console.error('Logout failed', error);
     }
   },
 
-  // Check if user is logged in
   async isLoggedIn(): Promise<boolean> {
     try {
-      const username = await SafeAsyncStorage.getItem('currentUser');
+      const username = await getSessionUsername();
       return !!username;
     } catch (error) {
       return false;

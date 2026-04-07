@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
 import { auth } from '@/utils/auth';
+import { useEffect, useState } from 'react';
 
 export const useAuth = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
