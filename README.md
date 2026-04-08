@@ -1,6 +1,6 @@
 # Workout App
 ## Description
-A workout app that allows users to curate/automate their own workouts and keep track of their workout progess.
+A workout app that allows users to curate/automate their own workouts and keep track of their workout progress.
 
 Goal page - allows user to add their workout goals (e.g. grow their glutes, prepare for a marathon) and underneath each goal, they can add their workout exercises
 Home page (this is the page that the user first sees once they are logged in) - there is the date at the top and then a list of checkboxs for that day's workout.
