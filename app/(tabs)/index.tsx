@@ -77,13 +77,8 @@ export default function HomeScreen() {
       });
 
       exercises.sort((a, b) => {
-        if (a.isCompleted !== b.isCompleted) {
-          return a.isCompleted ? 1 : -1;
-        }
-        if (!a.isCompleted) return 0;
-        const ta = a.completedDate ? new Date(a.completedDate).getTime() : 0;
-        const tb = b.completedDate ? new Date(b.completedDate).getTime() : 0;
-        return ta - tb;
+        if (a.isCompleted === b.isCompleted) return 0;
+        return a.isCompleted ? 1 : -1;
       });
 
       setAllExercises(exercises);
@@ -223,11 +218,11 @@ export default function HomeScreen() {
                           styles.checkboxInner,
                           {
                             borderColor: exercise.isCompleted ? palette.tint : palette.borderStrong,
-                            backgroundColor: 'transparent',
+                            backgroundColor: exercise.isCompleted ? palette.tint : 'transparent',
                           },
                         ]}>
                         {exercise.isCompleted && (
-                          <MaterialIcons name="check" size={26} color={palette.tint} />
+                          <MaterialIcons name="check" size={22} color="#fff" />
                         )}
                       </View>
                     </TouchableOpacity>
@@ -385,10 +380,10 @@ const styles = StyleSheet.create({
     paddingRight: 2,
   },
   checkboxInner: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderWidth: 2,
-    borderRadius: 4,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
